@@ -166,6 +166,8 @@ export function findPath(graph, startId, goalId) {
 }
 
 export function nearestNode(graph, lat, lng) {
+  if (!graph || !graph.nodeList || graph.nodeList.length === 0) return null;
+
   let bestId = null;
   let bestDist = Infinity;
 
