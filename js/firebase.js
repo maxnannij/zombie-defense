@@ -27,12 +27,12 @@ import {
 
 // ⚠️ REEMPLAZÁ ESTE OBJETO CON EL DE TU PROYECTO
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROJECT.firebaseapp.com",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_PROJECT.appspot.com",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyD86dBkMQV3FErho7w0VitP9218GDe2gyg",
+    authDomain: "game-8f0a5.firebaseapp.com",
+    projectId: "game-8f0a5",
+    storageBucket: "game-8f0a5.firebasestorage.app",
+    messagingSenderId: "575528913744",
+    appId: "1:575528913744:web:b66d13dc50bf39a2d27a55"
 };
 
 let app = null;
