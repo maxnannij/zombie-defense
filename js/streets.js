@@ -1,108 +1,42 @@
 /**
- * Descarga calles de OpenStreetMap vía Overpass API
- * y construye un grafo simple para pathfinding.
- * Usa varios mirrors + reintentos porque overpass-api.de suele dar 502.
+ * Calles offline precargadas (Buenos Aires) + pathfinding.
+ * No depende de Overpass ni de GPS.
  */
 
-const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://lz4.overpass-api.de/api/interpreter',
-  'https://z.overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter'
-];
+let cachedGraph = null;
 
-export async function fetchStreets(bbox) {
-  const [south, west, north, east] = bbox;
+export async function fetchStreets(_bboxIgnored) {
+  if (cachedGraph) return cachedGraph;
 
-  const query = `
-    [out:json][timeout:30];
-    (
-      way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street)$"](${south},${west},${north},${east});
-    );
-    out body;
-    >;
-    out skel qt;
-  `;
-
-  let lastError = null;
-
-  for (const url of OVERPASS_ENDPOINTS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          body: query,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
-
-        if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
-          lastError = new Error(`Overpass ${response.status} en ${url}`);
-          await sleep(800 * attempt);
-          continue;
-        }
-
-        if (!response.ok) {
-          lastError = new Error(`Overpass error: ${response.status}`);
-          continue;
-        }
-
-        const data = await response.json();
-        const graph = parseOverpassToGraph(data);
-
-        if (graph.nodeList.length === 0) {
-          lastError = new Error('Overpass devolvió 0 calles');
-          continue;
-        }
-
-        return graph;
-      } catch (err) {
-        lastError = err;
-        await sleep(600 * attempt);
-      }
-    }
+  const response = await fetch('data/ba-streets.json');
+  if (!response.ok) {
+    throw new Error('No se pudo cargar el mapa local de Buenos Aires');
   }
 
-  throw new Error(
-    lastError?.message
-      ? `No se pudieron cargar las calles (${lastError.message}). Probá de nuevo en unos segundos.`
-      : 'No se pudieron cargar las calles. Probá de nuevo en unos segundos.'
-  );
+  const data = await response.json();
+  cachedGraph = buildGraphFromLocal(data);
+  return cachedGraph;
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+export async function getDefaultCenter() {
+  try {
+    const response = await fetch('data/ba-streets.json');
+    const data = await response.json();
+    if (data.meta?.center) {
+      return { lat: data.meta.center[0], lng: data.meta.center[1] };
+    }
+  } catch (_) {}
+  return { lat: -34.5075, lng: -58.4880 };
 }
 
-function parseOverpassToGraph(data) {
-  const nodes = new Map();
-  const ways = [];
-
-  for (const el of data.elements || []) {
-    if (el.type === 'node') {
-      nodes.set(el.id, { lat: el.lat, lng: el.lon });
-    }
-  }
-
-  for (const el of data.elements || []) {
-    if (el.type === 'way' && el.nodes && el.nodes.length >= 2) {
-      const coords = [];
-      for (const nid of el.nodes) {
-        const n = nodes.get(nid);
-        if (n) coords.push([n.lat, n.lng]);
-      }
-      if (coords.length >= 2) {
-        ways.push({ id: el.id, nodes: el.nodes, coords });
-      }
-    }
-  }
-
+function buildGraphFromLocal(data) {
   const graph = {
     nodes: new Map(),
-    ways,
-    nodeList: []
+    ways: data.ways || [],
+    nodeList: data.nodeList || []
   };
 
-  for (const [id, pos] of nodes) {
+  for (const [id, pos] of Object.entries(data.nodes || {})) {
     graph.nodes.set(id, {
       lat: pos.lat,
       lng: pos.lng,
@@ -110,24 +44,18 @@ function parseOverpassToGraph(data) {
     });
   }
 
-  for (const way of ways) {
-    for (let i = 0; i < way.nodes.length - 1; i++) {
-      const a = way.nodes[i];
-      const b = way.nodes[i + 1];
-      const na = graph.nodes.get(a);
-      const nb = graph.nodes.get(b);
-      if (!na || !nb) continue;
-
-      const dist = haversine(na.lat, na.lng, nb.lat, nb.lng);
-      na.neighbors.set(b, dist);
-      nb.neighbors.set(a, dist);
-    }
+  for (const [a, b, dist] of data.edges || []) {
+    const na = graph.nodes.get(a);
+    const nb = graph.nodes.get(b);
+    if (!na || !nb) continue;
+    na.neighbors.set(b, dist);
+    nb.neighbors.set(a, dist);
   }
 
-  for (const [id, node] of graph.nodes) {
-    if (node.neighbors.size > 0) {
-      graph.nodeList.push(id);
-    }
+  if (graph.nodeList.length === 0) {
+    graph.nodeList = [...graph.nodes.keys()].filter(
+      id => graph.nodes.get(id).neighbors.size > 0
+    );
   }
 
   return graph;
@@ -135,7 +63,7 @@ function parseOverpassToGraph(data) {
 
 function haversine(lat1, lng1, lat2, lng2) {
   const R = 6371000;
-  const toRad = x => x * Math.PI / 180;
+  const toRad = x => (x * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
   const a =
