@@ -14,11 +14,9 @@ btnStart.addEventListener('click', async () => {
   geoError.classList.add('hidden');
 
   try {
-    // 1. Firebase (auth anónimo). Si no está configurado, sigue offline.
     btnStart.textContent = 'Iniciando sesión...';
     const firebaseOk = await initFirebase();
 
-    // 2. Ubicación
     btnStart.textContent = 'Obteniendo ubicación...';
     let lat, lng;
     let usedFallback = false;
@@ -34,29 +32,27 @@ btnStart.addEventListener('click', async () => {
       usedFallback = true;
     }
 
-    // 3. Pantalla de juego
     screenStart.classList.add('hidden');
     screenGame.classList.remove('hidden');
 
-    // 4. Crear e iniciar juego (carga progreso si hay)
     game = new Game({
       lat,
       lng,
-      radiusMeters: 450,
+      radiusMeters: 280,
       firebaseEnabled: firebaseOk
     });
 
-    await game.init();
+    await game.initSelectMode();
 
     if (usedFallback) {
       setTimeout(() => {
         const t = document.getElementById('toast');
         if (t) {
-          t.textContent = 'Usando ubicación de demo (Olivos). Para tu barrio real, permití la ubicación.';
+          t.textContent = 'Ubicación de demo (Olivos). Mové el mapa a tu manzana.';
           t.classList.remove('hidden');
           setTimeout(() => t.classList.add('hidden'), 4500);
         }
-      }, 2800);
+      }, 800);
     }
   } catch (err) {
     console.error(err);
@@ -73,7 +69,6 @@ function getCurrentPosition() {
       reject(new Error('Tu navegador no soporta geolocalización.'));
       return;
     }
-
     navigator.geolocation.getCurrentPosition(
       resolve,
       (err) => {
@@ -83,11 +78,7 @@ function getCurrentPosition() {
         if (err.code === 3) msg = 'Tiempo de espera agotado.';
         reject(new Error(msg));
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   });
 }

@@ -9,23 +9,30 @@
 </head>
 <body>
   <div id="app">
-    <!-- Pantalla de carga / permisos -->
     <div id="screen-start" class="screen">
       <div class="card">
         <h1>🧟 Zombie Defense</h1>
         <p>Defiende tu barrio de la horda.</p>
-        <p class="small">Necesitamos tu ubicación para cargar el mapa de tu zona.</p>
+        <p class="small">Elegí una manzana en el mapa y defendela.</p>
         <button id="btn-start" class="btn primary">Comenzar</button>
         <p id="geo-error" class="error hidden"></p>
       </div>
     </div>
 
-    <!-- Pantalla principal del juego -->
     <div id="screen-game" class="screen hidden">
       <div id="map"></div>
+      <div id="crosshair" class="hidden"></div>
 
-      <!-- HUD superior -->
-      <div id="hud">
+      <div id="select-overlay">
+        <div id="select-hint">
+          Mové el mapa y tocá <strong>Jugar en esta manzana</strong>
+        </div>
+        <button id="btn-confirm-area" class="btn primary">
+          Jugar en esta manzana
+        </button>
+      </div>
+
+      <div id="hud" class="hidden">
         <div class="hud-item">
           <span class="label">Oro</span>
           <span id="gold">0</span>
@@ -40,8 +47,7 @@
         </div>
       </div>
 
-      <!-- Controles inferiores -->
-      <div id="controls">
+      <div id="controls" class="hidden">
         <button id="btn-place-defender" class="btn tool active" data-tool="defender">
           👤 Defensor<br><small>50 oro</small>
         </button>
@@ -53,7 +59,6 @@
         </button>
       </div>
 
-      <!-- Mensaje temporal -->
       <div id="toast" class="hidden"></div>
     </div>
   </div>
