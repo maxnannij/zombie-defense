@@ -1,47 +1,89 @@
 /**
  * Descarga calles de OpenStreetMap vía Overpass API
  * y construye un grafo simple para pathfinding.
+ * Usa varios mirrors + reintentos porque overpass-api.de suele dar 502.
  */
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+  'https://z.overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'
+];
 
 export async function fetchStreets(bbox) {
   const [south, west, north, east] = bbox;
 
   const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:30];
     (
-      way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street|service|footway|path|pedestrian|track)$"](${south},${west},${north},${east});
+      way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street)$"](${south},${west},${north},${east});
     );
     out body;
     >;
     out skel qt;
   `;
 
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    body: query
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    throw new Error(`Overpass error: ${response.status}`);
+  for (const url of OVERPASS_ENDPOINTS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          body: query,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
+          lastError = new Error(`Overpass ${response.status} en ${url}`);
+          await sleep(800 * attempt);
+          continue;
+        }
+
+        if (!response.ok) {
+          lastError = new Error(`Overpass error: ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const graph = parseOverpassToGraph(data);
+
+        if (graph.nodeList.length === 0) {
+          lastError = new Error('Overpass devolvió 0 calles');
+          continue;
+        }
+
+        return graph;
+      } catch (err) {
+        lastError = err;
+        await sleep(600 * attempt);
+      }
+    }
   }
 
-  const data = await response.json();
-  return parseOverpassToGraph(data);
+  throw new Error(
+    lastError?.message
+      ? `No se pudieron cargar las calles (${lastError.message}). Probá de nuevo en unos segundos.`
+      : 'No se pudieron cargar las calles. Probá de nuevo en unos segundos.'
+  );
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 function parseOverpassToGraph(data) {
   const nodes = new Map();
   const ways = [];
 
-  for (const el of data.elements) {
+  for (const el of data.elements || []) {
     if (el.type === 'node') {
       nodes.set(el.id, { lat: el.lat, lng: el.lon });
     }
   }
 
-  for (const el of data.elements) {
+  for (const el of data.elements || []) {
     if (el.type === 'way' && el.nodes && el.nodes.length >= 2) {
       const coords = [];
       for (const nid of el.nodes) {
@@ -96,10 +138,10 @@ function haversine(lat1, lng1, lat2, lng2) {
   const toRad = x => x * Math.PI / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export function findPath(graph, startId, goalId) {
