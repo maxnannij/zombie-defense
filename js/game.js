@@ -74,8 +74,9 @@ export class Game {
 
   _initMap() {
     this.map = L.map('map', { zoomControl: true, attributionControl: true }).setView([this.center.lat, this.center.lng], 17);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 20
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
     }).addTo(this.map);
     this.streetLayer = L.layerGroup().addTo(this.map);
     this.entityLayer = L.layerGroup().addTo(this.map);
