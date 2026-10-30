@@ -26,7 +26,6 @@ html, body {
   display: none !important;
 }
 
-/* ===== Pantalla de inicio ===== */
 #screen-start {
   display: flex;
   align-items: center;
@@ -65,7 +64,6 @@ html, body {
   margin-top: 1rem;
 }
 
-/* ===== Botones ===== */
 .btn {
   border: none;
   border-radius: 10px;
@@ -112,14 +110,12 @@ html, body {
   margin-top: 2px;
 }
 
-/* ===== Mapa ===== */
 #map {
   position: absolute;
   inset: 0;
   z-index: 1;
 }
 
-/* ===== HUD ===== */
 #hud {
   position: absolute;
   top: 12px;
@@ -159,7 +155,6 @@ html, body {
   color: #eee !important;
 }
 
-/* ===== Controles ===== */
 #controls {
   position: absolute;
   bottom: 16px;
@@ -176,7 +171,6 @@ html, body {
   font-size: 0.95rem;
 }
 
-/* ===== Toast ===== */
 #toast {
   position: absolute;
   top: 80px;
@@ -196,7 +190,6 @@ html, body {
   opacity: 0;
 }
 
-/* Leaflet tweaks */
 .leaflet-control-attribution {
   font-size: 9px !important;
   background: rgba(0,0,0,0.6) !important;
@@ -212,4 +205,61 @@ html, body {
   background: #1e1e1e !important;
   color: #eee !important;
   border: 1px solid #333 !important;
+}
+
+#select-overlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+#select-overlay .btn {
+  pointer-events: auto;
+}
+
+#select-hint {
+  background: rgba(15, 15, 15, 0.9);
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+#select-hint strong {
+  color: #fff;
+}
+
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  z-index: 900;
+  pointer-events: none;
+  border: 2px solid #c0392b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+}
+
+#crosshair::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: #c0392b;
+  border-radius: 50%;
 }
