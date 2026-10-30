@@ -54,12 +54,8 @@ export class Game {
       this.areaCircle.setLatLng(c);
     } else {
       this.areaCircle = L.circle(c, {
-        radius: this.radius,
-        color: '#c0392b',
-        weight: 2,
-        fillColor: '#c0392b',
-        fillOpacity: 0.08,
-        interactive: false
+        radius: this.radius, color: '#c0392b', weight: 2,
+        fillColor: '#c0392b', fillOpacity: 0.08, interactive: false
       }).addTo(this.map);
     }
   }
@@ -78,10 +74,10 @@ export class Game {
           this.totalKills = progress.totalKills ?? 0;
         }
       }
-      const bbox = this._getBBox();
-      this.graph = await fetchStreets(bbox);
+      const fullGraph = await fetchStreets(null);
+      this.graph = this._clipGraph(fullGraph, this.center, this.radius * 1.15);
       if (!this.graph || !this.graph.nodeList || this.graph.nodeList.length < 8) {
-        throw new Error('Pocas calles en esta zona. Mové el mapa a un área más urbana.');
+        throw new Error('Pocas calles en esta zona. Mové el círculo a otra manzana.');
       }
       this._drawStreets();
       this.homeNodeId = nearestNode(this.graph, this.center.lat, this.center.lng);
@@ -329,6 +325,31 @@ export class Game {
       this._dirty = false;
       await saveLeaderboardEntry({ bestWave: this.bestWave, totalKills: this.totalKills });
     }
+  }
+
+  _clipGraph(full, center, radiusM) {
+    const keep = new Set();
+    for (const id of full.nodeList) {
+      const n = full.nodes.get(id);
+      if (this._dist(center.lat, center.lng, n.lat, n.lng) <= radiusM) keep.add(id);
+    }
+    const graph = { nodes: new Map(), ways: [], nodeList: [] };
+    for (const id of keep) {
+      const src = full.nodes.get(id);
+      const neighbors = new Map();
+      for (const [nid, dist] of src.neighbors) {
+        if (keep.has(nid)) neighbors.set(nid, dist);
+      }
+      graph.nodes.set(id, { lat: src.lat, lng: src.lng, neighbors });
+      if (neighbors.size > 0) graph.nodeList.push(id);
+    }
+    for (const way of full.ways) {
+      const coords = way.coords.filter(([lat, lng]) =>
+        this._dist(center.lat, center.lng, lat, lng) <= radiusM * 1.05
+      );
+      if (coords.length >= 2) graph.ways.push({ id: way.id, coords });
+    }
+    return graph;
   }
 
   _dist(lat1, lng1, lat2, lng2) {
