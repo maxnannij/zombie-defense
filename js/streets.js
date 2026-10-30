@@ -1,79 +1,54 @@
 /**
- * Mapa offline de Buenos Aires (grilla de manzanas).
- * Se genera en el cliente: no Overpass, no GPS, no archivo externo.
+ * Calles reales de Olivos (OSM precargadas) + pathfinding.
+ * Los zombies se mueven solo por estas calles.
  */
 
-const DEFAULT_CENTER = { lat: -34.5075, lng: -58.4880 };
+import { OLIVOS_DATA } from './olivos-data.js';
 
 let cachedGraph = null;
 
 export async function getDefaultCenter() {
-  return { ...DEFAULT_CENTER };
+  const [lat, lng] = OLIVOS_DATA.c;
+  return { lat, lng };
 }
 
 export async function fetchStreets(_bboxIgnored) {
   if (cachedGraph) return cachedGraph;
-  cachedGraph = buildGridGraph(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng, 700, 100);
+  cachedGraph = buildGraphFromData(OLIVOS_DATA);
   return cachedGraph;
 }
 
-function buildGridGraph(centerLat, centerLng, halfMeters, blockMeters) {
-  const mToLat = 1 / 111000;
-  const mToLng = 1 / (111000 * Math.cos((centerLat * Math.PI) / 180));
-  const n = Math.floor((2 * halfMeters) / blockMeters) + 1;
-
+function buildGraphFromData(data) {
   const graph = {
     nodes: new Map(),
     ways: [],
     nodeList: []
   };
 
-  const nid = (i, j) => `n${i}_${j}`;
-
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const dy = -halfMeters + i * blockMeters;
-      const dx = -halfMeters + j * blockMeters;
-      const lat = centerLat + dy * mToLat;
-      const lng = centerLng + dx * mToLng;
-      const id = nid(i, j);
-      graph.nodes.set(id, { lat, lng, neighbors: new Map() });
-      graph.nodeList.push(id);
-    }
+  for (const [id, pos] of Object.entries(data.n || {})) {
+    graph.nodes.set(String(id), {
+      lat: pos[0],
+      lng: pos[1],
+      neighbors: new Map()
+    });
   }
 
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const a = nid(i, j);
-      const na = graph.nodes.get(a);
-      if (j + 1 < n) {
-        const b = nid(i, j + 1);
-        na.neighbors.set(b, blockMeters);
-        graph.nodes.get(b).neighbors.set(a, blockMeters);
-      }
-      if (i + 1 < n) {
-        const b = nid(i + 1, j);
-        na.neighbors.set(b, blockMeters);
-        graph.nodes.get(b).neighbors.set(a, blockMeters);
-      }
-    }
+  for (const [a, b, dist] of data.e || []) {
+    const idA = String(a);
+    const idB = String(b);
+    const nodeA = graph.nodes.get(idA);
+    const nodeB = graph.nodes.get(idB);
+    if (!nodeA || !nodeB) continue;
+    nodeA.neighbors.set(idB, dist);
+    nodeB.neighbors.set(idA, dist);
   }
 
-  for (let i = 0; i < n; i++) {
-    const coords = [];
-    for (let j = 0; j < n; j++) {
-      const node = graph.nodes.get(nid(i, j));
-      coords.push([node.lat, node.lng]);
-    }
-    graph.ways.push({ id: `h${i}`, coords });
+  for (const [id, node] of graph.nodes) {
+    if (node.neighbors.size > 0) graph.nodeList.push(id);
   }
-  for (let j = 0; j < n; j++) {
-    const coords = [];
-    for (let i = 0; i < n; i++) {
-      const node = graph.nodes.get(nid(i, j));
-      coords.push([node.lat, node.lng]);
-    }
-    graph.ways.push({ id: `v${j}`, coords });
+
+  for (let i = 0; i < (data.w || []).length; i++) {
+    graph.ways.push({ id: `w${i}`, coords: data.w[i] });
   }
 
   return graph;
