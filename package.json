@@ -1,0 +1,14 @@
+{
+  "name": "zombie-defense",
+  "version": "1.0.0",
+  "description": "Tower defense sobre el mapa real de tu barrio",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "deploy": "firebase deploy --only hosting",
+    "deploy:preview": "firebase hosting:channel:deploy preview"
+  },
+  "keywords": ["zombie", "tower-defense", "leaflet", "firebase", "openstreetmap"],
+  "author": "",
+  "license": "MIT"
+}

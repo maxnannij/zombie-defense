@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Zombie Defense – Defiende tu barrio</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Pantalla de carga / permisos -->
+    <div id="screen-start" class="screen">
+      <div class="card">
+        <h1>🧟 Zombie Defense</h1>
+        <p>Defiende tu barrio de la horda.</p>
+        <p class="small">Necesitamos tu ubicación para cargar el mapa de tu zona.</p>
+        <button id="btn-start" class="btn primary">Comenzar</button>
+        <p id="geo-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <!-- Pantalla principal del juego -->
+    <div id="screen-game" class="screen hidden">
+      <div id="map"></div>
+
+      <!-- HUD superior -->
+      <div id="hud">
+        <div class="hud-item">
+          <span class="label">Oro</span>
+          <span id="gold">0</span>
+        </div>
+        <div class="hud-item">
+          <span class="label">Oleada</span>
+          <span id="wave">0</span>
+        </div>
+        <div class="hud-item">
+          <span class="label">Vivos</span>
+          <span id="zombies-alive">0</span>
+        </div>
+      </div>
+
+      <!-- Controles inferiores -->
+      <div id="controls">
+        <button id="btn-place-defender" class="btn tool active" data-tool="defender">
+          👤 Defensor<br><small>50 oro</small>
+        </button>
+        <button id="btn-place-barricade" class="btn tool" data-tool="barricade">
+          🚧 Barricada<br><small>80 oro</small>
+        </button>
+        <button id="btn-next-wave" class="btn primary">
+          Siguiente oleada
+        </button>
+      </div>
+
+      <!-- Mensaje temporal -->
+      <div id="toast" class="hidden"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
