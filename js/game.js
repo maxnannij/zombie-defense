@@ -10,12 +10,13 @@ const DEFENDER_DAMAGE = 25;
 const DEFENDER_COOLDOWN = 0.7;
 
 export class Game {
-  constructor({ lat, lng, radiusMeters = 450, firebaseEnabled = false }) {
+  constructor({ lat, lng, radiusMeters = 280, firebaseEnabled = false }) {
     this.center = { lat, lng };
     this.radius = radiusMeters;
     this.firebaseEnabled = firebaseEnabled;
     this.map = null;
     this.graph = null;
+    this.ready = false;
     this.gold = 120;
     this.wave = 0;
     this.bestWave = 0;
@@ -31,11 +32,43 @@ export class Game {
     this._dirty = false;
     this.streetLayer = null;
     this.entityLayer = null;
+    this.areaCircle = null;
   }
 
-  async init() {
+  async initSelectMode() {
     this._initMap();
-    showToast('Cargando calles del barrio...');
+    document.getElementById('crosshair').classList.remove('hidden');
+    document.getElementById('select-overlay').classList.remove('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('controls').classList.add('hidden');
+    this._updateAreaCircle();
+    this.map.on('move', () => this._updateAreaCircle());
+    document.getElementById('btn-confirm-area').onclick = () => this.confirmArea();
+    showToast('Elegí la manzana moviendo el mapa');
+  }
+
+  _updateAreaCircle() {
+    const c = this.map.getCenter();
+    this.center = { lat: c.lat, lng: c.lng };
+    if (this.areaCircle) {
+      this.areaCircle.setLatLng(c);
+    } else {
+      this.areaCircle = L.circle(c, {
+        radius: this.radius,
+        color: '#c0392b',
+        weight: 2,
+        fillColor: '#c0392b',
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(this.map);
+    }
+  }
+
+  async confirmArea() {
+    const btn = document.getElementById('btn-confirm-area');
+    btn.disabled = true;
+    btn.textContent = 'Cargando calles...';
+    showToast('Cargando calles de la manzana...');
     try {
       if (this.firebaseEnabled) {
         const progress = await loadProgress();
@@ -43,44 +76,52 @@ export class Game {
           this.gold = progress.gold ?? this.gold;
           this.bestWave = progress.bestWave ?? 0;
           this.totalKills = progress.totalKills ?? 0;
-          showToast(`Progreso cargado · Mejor oleada: ${this.bestWave}`);
         }
       }
       const bbox = this._getBBox();
       this.graph = await fetchStreets(bbox);
-      if (this.graph.nodeList.length < 10) {
-        throw new Error('Pocas calles encontradas en esta zona. Probá en un área más urbana.');
+      if (!this.graph || !this.graph.nodeList || this.graph.nodeList.length < 8) {
+        throw new Error('Pocas calles en esta zona. Mové el mapa a un área más urbana.');
       }
       this._drawStreets();
       this.homeNodeId = nearestNode(this.graph, this.center.lat, this.center.lng);
+      if (!this.homeNodeId) {
+        throw new Error('No se encontró una calle cerca del centro. Probá otra manzana.');
+      }
       L.circleMarker([this.center.lat, this.center.lng], {
         radius: 10, color: '#2ecc71', fillColor: '#27ae60', fillOpacity: 0.9, weight: 3
-      }).addTo(this.map).bindTooltip('Tu base', { permanent: false });
-      this._bindUI();
-      updateHUD({ gold: this.gold, wave: this.wave, zombiesAlive: 0 });
-      if (!this.firebaseEnabled) {
-        showToast('¡Listo! (modo offline – configurá Firebase para guardar progreso)');
-      } else {
-        showToast('¡Listo! Colocá defensores y lanzá la primera oleada.');
+      }).addTo(this.entityLayer).bindTooltip('Tu base', { permanent: false });
+      document.getElementById('crosshair').classList.add('hidden');
+      document.getElementById('select-overlay').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+      document.getElementById('controls').classList.remove('hidden');
+      if (this.areaCircle) {
+        this.areaCircle.setStyle({ color: '#27ae60', fillColor: '#27ae60', fillOpacity: 0.05 });
       }
+      this._bindUI();
+      this.ready = true;
+      updateHUD({ gold: this.gold, wave: this.wave, zombiesAlive: 0 });
+      showToast('¡Listo! Colocá defensores y lanzá la oleada.');
       this.running = true;
       this._startAutoSave();
+      this.lastTime = performance.now();
       requestAnimationFrame(ts => this._loop(ts));
     } catch (err) {
       console.error(err);
-      showToast('Error cargando calles: ' + err.message, 5000);
+      showToast(err.message || 'Error cargando calles', 5000);
+      btn.disabled = false;
+      btn.textContent = 'Jugar en esta manzana';
     }
   }
 
   _initMap() {
-    this.map = L.map('map', { zoomControl: true, attributionControl: true }).setView([this.center.lat, this.center.lng], 17);
+    this.map = L.map('map', { zoomControl: true, attributionControl: true }).setView([this.center.lat, this.center.lng], 18);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
     }).addTo(this.map);
     this.streetLayer = L.layerGroup().addTo(this.map);
     this.entityLayer = L.layerGroup().addTo(this.map);
-    this.map.on('click', (e) => this._onMapClick(e));
+    setTimeout(() => this.map.invalidateSize(), 100);
   }
 
   _getBBox() {
@@ -93,8 +134,9 @@ export class Game {
   }
 
   _drawStreets() {
+    this.streetLayer.clearLayers();
     for (const way of this.graph.ways) {
-      L.polyline(way.coords, { color: '#555', weight: 4, opacity: 0.7 }).addTo(this.streetLayer);
+      L.polyline(way.coords, { color: '#555', weight: 4, opacity: 0.75 }).addTo(this.streetLayer);
     }
   }
 
@@ -107,9 +149,14 @@ export class Game {
       });
     });
     document.getElementById('btn-next-wave').addEventListener('click', () => this.startWave());
+    this.map.on('click', (e) => this._onMapClick(e));
   }
 
   _onMapClick(e) {
+    if (!this.ready || !this.graph) {
+      showToast('Todavía no se cargaron las calles');
+      return;
+    }
     const { lat, lng } = e.latlng;
     if (this.tool === 'defender') this._placeDefender(lat, lng);
     else if (this.tool === 'barricade') this._placeBarricade(lat, lng);
@@ -118,7 +165,7 @@ export class Game {
   _placeDefender(lat, lng) {
     if (this.gold < COST_DEFENDER) { showToast('Oro insuficiente'); return; }
     const nodeId = nearestNode(this.graph, lat, lng);
-    if (!nodeId) return;
+    if (!nodeId) { showToast('Tocá cerca de una calle'); return; }
     const node = this.graph.nodes.get(nodeId);
     for (const d of this.defenders) {
       if (this._dist(d.lat, d.lng, node.lat, node.lng) < 25) {
@@ -142,7 +189,7 @@ export class Game {
   _placeBarricade(lat, lng) {
     if (this.gold < COST_BARRICADE) { showToast('Oro insuficiente'); return; }
     const nodeId = nearestNode(this.graph, lat, lng);
-    if (!nodeId) return;
+    if (!nodeId) { showToast('Tocá cerca de una calle'); return; }
     const node = this.graph.nodes.get(nodeId);
     this.gold -= COST_BARRICADE;
     this._markDirty();
@@ -155,6 +202,7 @@ export class Game {
   }
 
   startWave() {
+    if (!this.ready || !this.graph) return;
     if (this.zombies.length > 0) { showToast('Todavía hay zombies vivos'); return; }
     this.wave++;
     if (this.wave > this.bestWave) this.bestWave = this.wave;
