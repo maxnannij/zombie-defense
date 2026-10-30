@@ -1,61 +1,79 @@
 /**
- * Calles offline precargadas (Buenos Aires) + pathfinding.
- * No depende de Overpass ni de GPS.
+ * Mapa offline de Buenos Aires (grilla de manzanas).
+ * Se genera en el cliente: no Overpass, no GPS, no archivo externo.
  */
+
+const DEFAULT_CENTER = { lat: -34.5075, lng: -58.4880 };
 
 let cachedGraph = null;
 
+export async function getDefaultCenter() {
+  return { ...DEFAULT_CENTER };
+}
+
 export async function fetchStreets(_bboxIgnored) {
   if (cachedGraph) return cachedGraph;
-
-  const response = await fetch('data/ba-streets.json');
-  if (!response.ok) {
-    throw new Error('No se pudo cargar el mapa local de Buenos Aires');
-  }
-
-  const data = await response.json();
-  cachedGraph = buildGraphFromLocal(data);
+  cachedGraph = buildGridGraph(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng, 700, 100);
   return cachedGraph;
 }
 
-export async function getDefaultCenter() {
-  try {
-    const response = await fetch('data/ba-streets.json');
-    const data = await response.json();
-    if (data.meta?.center) {
-      return { lat: data.meta.center[0], lng: data.meta.center[1] };
-    }
-  } catch (_) {}
-  return { lat: -34.5075, lng: -58.4880 };
-}
+function buildGridGraph(centerLat, centerLng, halfMeters, blockMeters) {
+  const mToLat = 1 / 111000;
+  const mToLng = 1 / (111000 * Math.cos((centerLat * Math.PI) / 180));
+  const n = Math.floor((2 * halfMeters) / blockMeters) + 1;
 
-function buildGraphFromLocal(data) {
   const graph = {
     nodes: new Map(),
-    ways: data.ways || [],
-    nodeList: data.nodeList || []
+    ways: [],
+    nodeList: []
   };
 
-  for (const [id, pos] of Object.entries(data.nodes || {})) {
-    graph.nodes.set(id, {
-      lat: pos.lat,
-      lng: pos.lng,
-      neighbors: new Map()
-    });
+  const nid = (i, j) => `n${i}_${j}`;
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const dy = -halfMeters + i * blockMeters;
+      const dx = -halfMeters + j * blockMeters;
+      const lat = centerLat + dy * mToLat;
+      const lng = centerLng + dx * mToLng;
+      const id = nid(i, j);
+      graph.nodes.set(id, { lat, lng, neighbors: new Map() });
+      graph.nodeList.push(id);
+    }
   }
 
-  for (const [a, b, dist] of data.edges || []) {
-    const na = graph.nodes.get(a);
-    const nb = graph.nodes.get(b);
-    if (!na || !nb) continue;
-    na.neighbors.set(b, dist);
-    nb.neighbors.set(a, dist);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a = nid(i, j);
+      const na = graph.nodes.get(a);
+      if (j + 1 < n) {
+        const b = nid(i, j + 1);
+        na.neighbors.set(b, blockMeters);
+        graph.nodes.get(b).neighbors.set(a, blockMeters);
+      }
+      if (i + 1 < n) {
+        const b = nid(i + 1, j);
+        na.neighbors.set(b, blockMeters);
+        graph.nodes.get(b).neighbors.set(a, blockMeters);
+      }
+    }
   }
 
-  if (graph.nodeList.length === 0) {
-    graph.nodeList = [...graph.nodes.keys()].filter(
-      id => graph.nodes.get(id).neighbors.size > 0
-    );
+  for (let i = 0; i < n; i++) {
+    const coords = [];
+    for (let j = 0; j < n; j++) {
+      const node = graph.nodes.get(nid(i, j));
+      coords.push([node.lat, node.lng]);
+    }
+    graph.ways.push({ id: `h${i}`, coords });
+  }
+  for (let j = 0; j < n; j++) {
+    const coords = [];
+    for (let i = 0; i < n; i++) {
+      const node = graph.nodes.get(nid(i, j));
+      coords.push([node.lat, node.lng]);
+    }
+    graph.ways.push({ id: `v${j}`, coords });
   }
 
   return graph;
@@ -123,10 +141,7 @@ export function findPath(graph, startId, goalId) {
       if (!existing || tentativeG < existing.g) {
         const neighbor = graph.nodes.get(neighborId);
         const h = haversine(neighbor.lat, neighbor.lng, goalNode.lat, goalNode.lng);
-        open.set(neighborId, {
-          g: tentativeG,
-          f: tentativeG + h
-        });
+        open.set(neighborId, { g: tentativeG, f: tentativeG + h });
         cameFrom.set(neighborId, currentId);
       }
     }
