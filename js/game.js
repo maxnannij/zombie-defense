@@ -76,8 +76,8 @@ export class Game {
       }
       const fullGraph = await fetchStreets(null);
       this.graph = this._clipGraph(fullGraph, this.center, this.radius * 1.15);
-      if (!this.graph || !this.graph.nodeList || this.graph.nodeList.length < 8) {
-        throw new Error('Pocas calles en esta zona. Mové el círculo a otra manzana.');
+      if (!this.graph || !this.graph.nodeList || this.graph.nodeList.length < 4) {
+        throw new Error('Pocas calles en esta zona. Mové el círculo hacia las calles grises.');
       }
       this._drawStreets();
       this.homeNodeId = nearestNode(this.graph, this.center.lat, this.center.lng);
@@ -97,7 +97,7 @@ export class Game {
       this._bindUI();
       this.ready = true;
       updateHUD({ gold: this.gold, wave: this.wave, zombiesAlive: 0 });
-      showToast('¡Listo! Colocá defensores y lanzá la oleada.');
+      showToast('¡Listo! Tocá edificios para colocar defensores.');
       this.running = true;
       this._startAutoSave();
       this.lastTime = performance.now();
@@ -120,19 +120,10 @@ export class Game {
     setTimeout(() => this.map.invalidateSize(), 100);
   }
 
-  _getBBox() {
-    const deltaLat = this.radius / 111000;
-    const deltaLng = this.radius / (111000 * Math.cos(this.center.lat * Math.PI / 180));
-    return [
-      this.center.lat - deltaLat, this.center.lng - deltaLng,
-      this.center.lat + deltaLat, this.center.lng + deltaLng
-    ];
-  }
-
   _drawStreets() {
     this.streetLayer.clearLayers();
     for (const way of this.graph.ways) {
-      L.polyline(way.coords, { color: '#555', weight: 4, opacity: 0.75 }).addTo(this.streetLayer);
+      L.polyline(way.coords, { color: '#555', weight: 5, opacity: 0.85 }).addTo(this.streetLayer);
     }
   }
 
@@ -160,11 +151,12 @@ export class Game {
 
   _placeDefender(lat, lng) {
     if (this.gold < COST_DEFENDER) { showToast('Oro insuficiente'); return; }
-    const nodeId = nearestNode(this.graph, lat, lng);
-    if (!nodeId) { showToast('Tocá cerca de una calle'); return; }
-    const node = this.graph.nodes.get(nodeId);
+    if (this._dist(this.center.lat, this.center.lng, lat, lng) > this.radius) {
+      showToast('Colocá dentro del círculo');
+      return;
+    }
     for (const d of this.defenders) {
-      if (this._dist(d.lat, d.lng, node.lat, node.lng) < 25) {
+      if (this._dist(d.lat, d.lng, lat, lng) < 15) {
         showToast('Muy cerca de otro defensor');
         return;
       }
@@ -172,11 +164,11 @@ export class Game {
     this.gold -= COST_DEFENDER;
     this._markDirty();
     updateHUD({ gold: this.gold });
-    const marker = L.circleMarker([node.lat, node.lng], {
+    const marker = L.circleMarker([lat, lng], {
       radius: 9, color: '#fff', fillColor: '#ecf0f1', fillOpacity: 1, weight: 3
     }).addTo(this.entityLayer);
     this.defenders.push({
-      lat: node.lat, lng: node.lng, nodeId, marker,
+      lat, lng, nodeId: null, marker,
       cooldown: 0, range: DEFENDER_RANGE, damage: DEFENDER_DAMAGE
     });
     showToast('Defensor colocado');
@@ -306,12 +298,8 @@ export class Game {
 
   _startAutoSave() {
     if (!this.firebaseEnabled) return;
-    this._saveTimer = setInterval(() => {
-      if (this._dirty) this._save();
-    }, 25000);
-    window.addEventListener('beforeunload', () => {
-      if (this._dirty) this._save();
-    });
+    this._saveTimer = setInterval(() => { if (this._dirty) this._save(); }, 25000);
+    window.addEventListener('beforeunload', () => { if (this._dirty) this._save(); });
   }
 
   async _save() {
